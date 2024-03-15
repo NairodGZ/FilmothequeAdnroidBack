@@ -3,15 +3,14 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken')
 const bcrypt = require("bcrypt")
+const Model = require("./Models/models.js")
+const responseBuilder = require("./Helpers/responseBuilder.js")
+
 
 const secretJwtKey = 'dorian'
 
 // ======================== BDD ==========================//
 
-// Preparer un model (une classe Personne)
-const Personne = mongoose.model('Personne', {id : Number, email : String, pseudo : String}, "personne");
-const PersonneComplete = mongoose.model('PersonneComplete', { email : String, pseudo : String, motDePasse : String, codePostal : String, ville : String, numero : String}, "personne");
-const Film = mongoose.model("Film", {id : Number, title : String , synopsis : String, duration : String , year : String}, "film")
 
 const urlMongo = "mongodb://127.0.0.1:27017/db_demo";
 
@@ -42,7 +41,7 @@ app.use('/api-docs', swaggerUi.serve, swaggerUi.setup(swaggerDocument));
 
 
 // Déclarer un middleware
-function tokenVerify(req, res, next)
+async function tokenVerify(req, res, next)
 {
     const token = req.headers['authorization']
 
@@ -53,7 +52,7 @@ function tokenVerify(req, res, next)
     }
 
     // Problème 2 : token non valide
-    jwt.verify(token, secretJwtKey, (err, decoded) =>{
+    await jwt.verify(token, secretJwtKey, (err, decoded) =>{
         
         // Si erreur
         if(err)
@@ -73,26 +72,29 @@ function tokenVerify(req, res, next)
 
 }
 
-app.post("/verify-token", async(req, res) => {
+ app.post("/verify-token", async (req, res) => {
 
     const token = req.headers['authorization']
 
     // Problème 1 pas de token
     if(!token)
     {
-        return res.json({"code" : "403", "message" : "Token invalide"})
+        return responseBuilder(res,  "403",  "Token invalide", null)
     }
 
     // Problème 2 : token non valide
-    jwt.verify(token, secretJwtKey, (err, decoded) =>{
+    let verifyResult = false;
+    await jwt.verify(token, secretJwtKey, (err, decoded) =>{
         
         // Si erreur
         if(err)
         {
-            return res.json({"code" : "403", "message" : "Token invalide"})
+            verifyResult = false
+            //return responseBuilder(res,  "403",  "Token invalide", null)
         }
 
-        return res.json({"code" : "200", "message" : "Token valide", "data" :true})
+
+        //return responseBuilder(res,  "200",  "Token valide", null)
 
     })
 
@@ -101,11 +103,7 @@ app.post("/verify-token", async(req, res) => {
 
 app.post("/login", async(req, res) => {
 
-    console.log(req.body)
-
-    const personneQuery = await PersonneComplete.findOne({"email" : req.body.email})
-
-    console.log(personneQuery)
+    const personneQuery = await Model.getModelPersonneComplete().findOne({"email" : req.body.email})
 
     if(personneQuery)
     {
@@ -114,19 +112,15 @@ app.post("/login", async(req, res) => {
             
             const token = jwt.sign({mail : req.body.email}, secretJwtKey, {expiresIn : '1h'})
 
-            res.json( {code : "200", message : "Connection réussie", data : token});
+            return responseBuilder(res,  "200",  "Connection réussie", token)
 
         }
         else
         {
-            res.json({code : "403", message : "Données invalides"})
+            return responseBuilder(res,  "403",  "Donnees Invalides", null)
         }
     });
     }
-
-    
-
-    
 
 })
 
@@ -134,9 +128,9 @@ app.post("/login", async(req, res) => {
 app.get("/persons", async(req, res) => {
     //
     // Select all avec mongodb
-    const personnes = await Personne.find()
+    const personnes = await Model.getModelPersonneComplete().find()
  
-    res.json(personnes);
+    return responseBuilder(res,  "200",  "Requette réussie", personnes)
 })
 
 
@@ -146,9 +140,9 @@ app.get("/persons/:id", async (req, res) => {
      */
     const idRequest = parseInt(req.params.id);
 
-    const personne = await Personne.findOne({id : idRequest})
+    const personne = await Model.getModelPersonneComplete().findOne({id : idRequest})
  
-    res.json(personne);
+    return responseBuilder(res,  "200",  "Requette réussie", personne)
 });
 
 app.post("/persons/create", async(req, res) => {
@@ -161,9 +155,9 @@ app.post("/persons/create", async(req, res) => {
 
         console.log(req.body)
 
-    PersonneComplete.create(req.body);
+    Model.getModelPersonneComplete().create(req.body);
 
-    res.json({code : "200", message : "Requette réussie"} );
+    return responseBuilder(res,  "200",  "Requette réussie", null)
 
     })
     
@@ -175,11 +169,11 @@ app.post("/persons/create", async(req, res) => {
 app.get("/films", async(req, res) => {
     //
     // Select all avec mongodb
-    const films = await Film.find()
+    const films = await Model.getModelFilm().find()
 
     //console.log(films)
  
-    res.json({code : "200", message : "Requette réussie", data : films} );
+    return responseBuilder(res,  "200",  "Requette réussie", films)
 })
 
 app.get("/film/:id", async (req, res) => {
@@ -188,9 +182,9 @@ app.get("/film/:id", async (req, res) => {
      */
     const idRequest = parseInt(req.params.id);
 
-    const film = await Film.findOne({id : idRequest})
+    const film = await Model.getModelFilm().findOne({id : idRequest})
  
-    res.json({code : "200", message : "Requette réussie", data : film} );
+    return responseBuilder(res,  "200",  "Requette réussie", film)
 });
 
 
@@ -199,9 +193,9 @@ app.post("/film/create", tokenVerify, async (req, res) => {
         #swagger.description = 'Creer un film'
      */
 
-    await Film.create(req.body)
+    const response = await Model.getModelFilm().create(req.body)
 
-    res.json({code : "200", message : "Requette réussie"} );
+    return responseBuilder(res,  "200",  "Requette réussie", null)
 
 });
 
@@ -210,11 +204,20 @@ app.post("/film/update/:id", tokenVerify, async (req, res) => {
         #swagger.description = 'Mettre a jour un film'
      */
 
-        console.log(req.body)
+    console.log(req.body)
 
-    await Film.updateOne({"id" : req.body.id} , req.body)
+    const response = await Model.getModelFilm().updateOne({"id" : req.body.id} , req.body)
 
-    res.json({code : "200", message : "Requette réussie"} );
+    if(response.modifiedCount == 1)
+    {
+        return responseBuilder(res,  "200",  "Requette réussie", null)
+    }
+    else
+    {
+        return responseBuilder(res,  "403",  "Requette echouée", null)
+    }
+
+    
 
     
 
@@ -225,10 +228,10 @@ app.post("/film/delete/:id", tokenVerify, async (req, res) => {
         #swagger.description = 'Supprimer un film
      */
 
-    await Film.deleteOne({"id" : req.params.id})
+    await Model.getModelFilm().deleteOne({"id" : req.params.id})
 
 
-    res.json({code : "200", message : "Requette réussie"} );
+    return responseBuilder(res,  "200",  "Requette réussie", null)
 
 });
 
